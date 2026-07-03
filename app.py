@@ -9,9 +9,9 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://app-o3a5il.example.com",
-        # Yahan exam page ka origin bhi add karna hai agar assignment me diya ho.
-    ],
+    "https://app-o3a5il.example.com",
+    "https://exam.sanand.workers.dev/tds-2026-05-ga2"
+],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

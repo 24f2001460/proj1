@@ -7,7 +7,8 @@ from collections import defaultdict
 
 app = FastAPI()
 
-# CORS
+# ---------------- CORS ----------------
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -20,13 +21,44 @@ app.add_middleware(
     expose_headers=["X-Request-ID"],
 )
 
-# Rate limiting configuration
+# ---------------- Rate Limiter ----------------
+
 RATE_LIMIT = 15
-WINDOW = 10  # seconds
+WINDOW = 10
+
 client_requests = defaultdict(list)
 
 
-# Request Context Middleware
+@app.middleware("http")
+async def rate_limiter(request: Request, call_next):
+
+    # Allow CORS preflight
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
+    client_id = request.headers.get("X-Client-Id")
+
+    if client_id:
+        now = time.time()
+
+        client_requests[client_id] = [
+            t for t in client_requests[client_id]
+            if now - t < WINDOW
+        ]
+
+        if len(client_requests[client_id]) >= RATE_LIMIT:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Rate limit exceeded"},
+            )
+
+        client_requests[client_id].append(now)
+
+    return await call_next(request)
+
+
+# ---------------- Request Context ----------------
+
 @app.middleware("http")
 async def request_context(request: Request, call_next):
 
@@ -44,33 +76,7 @@ async def request_context(request: Request, call_next):
     return response
 
 
-# Rate Limiter Middleware
-@app.middleware("http")
-async def rate_limiter(request: Request, call_next):
-
-    # Allow CORS preflight requests
-    if request.method == "OPTIONS":
-        return await call_next(request)
-
-    client_id = request.headers.get("X-Client-Id", "anonymous")
-    current_time = time.time()
-
-    # Remove old timestamps
-    client_requests[client_id] = [
-        t for t in client_requests[client_id]
-        if current_time - t < WINDOW
-    ]
-
-    if len(client_requests[client_id]) >= RATE_LIMIT:
-        return JSONResponse(
-            status_code=429,
-            content={"detail": "Rate limit exceeded"},
-        )
-
-    client_requests[client_id].append(current_time)
-
-    return await call_next(request)
-
+# ---------------- Endpoint ----------------
 
 @app.get("/ping")
 async def ping(request: Request):
